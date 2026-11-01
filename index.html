@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#172554">
+  <meta name="description" content="Easy Photo Cutout - remove photo backgrounds in your browser.">
+  <title>Easy Photo Cutout</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#172033;background:#f4f7fb}
+    *{box-sizing:border-box} body{margin:0} header{background:#172554;color:white;padding:20px 16px;text-align:center}
+    h1{margin:0;font-size:clamp(24px,4vw,34px)} header p{margin:6px 0 0;color:#dbeafe}
+    main{max-width:980px;margin:22px auto;padding:0 14px 36px}
+    .panel{background:white;border:1px solid #e3e8f0;border-radius:18px;padding:18px;margin:14px 0;box-shadow:0 6px 24px #1725540b}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    button,.filebtn{border:0;border-radius:12px;padding:12px 16px;font-weight:650;cursor:pointer;background:#1d4ed8;color:white}
+    button.secondary{background:#e8eefc;color:#17336f} button:disabled{opacity:.5;cursor:not-allowed}
+    input[type=file]{max-width:100%} .field{display:flex;flex-direction:column;gap:7px;margin:8px 0}
+    label{font-size:14px;font-weight:650;color:#334155}
+    .preview{min-height:250px;border:1px dashed #cbd5e1;border-radius:14px;display:grid;place-items:center;overflow:hidden;
+      background-color:#fff;background-image:linear-gradient(45deg,#eef2f7 25%,transparent 25%),linear-gradient(-45deg,#eef2f7 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eef2f7 75%),linear-gradient(-45deg,transparent 75%,#eef2f7 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}
+    .preview img{max-width:100%;max-height:520px;object-fit:contain}
+    .swatches{display:flex;gap:9px;flex-wrap:wrap}.swatch{width:38px;height:38px;border-radius:50%;border:2px solid #cbd5e1;cursor:pointer}
+    #status{font-size:14px;color:#475569;min-height:22px;margin-top:10px}
+    .hint{font-size:13px;color:#64748b;line-height:1.5}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:650px){.two{grid-template-columns:1fr}}
+    .hidden{display:none!important}
+  </style>
+</head>
+<body>
+<header><h1>Easy Photo Cutout</h1><p>Remove background • Add a new background • Save PNG/JPG</p></header>
+<main>
+  <section class="panel">
+    <div class="field"><label for="photo">1. Choose your photo</label><input id="photo" type="file" accept="image/*"></div>
+    <div class="row">
+      <button id="remove" disabled>Remove Background</button>
+      <button id="reset" class="secondary" disabled>Reset</button>
+      <button id="install" class="secondary hidden">Install App</button>
+    </div>
+    <div id="status" role="status">Choose a photo to get started.</div>
+    <p class="hint">Background removal runs in your browser. The first use may take a little time to download the AI model. An internet connection is required for this feature.</p>
+  </section>
+  <section class="panel">
+    <div class="two">
+      <div><h3>Original photo</h3><div class="preview" id="originalPreview">Your photo will appear here</div></div>
+      <div><h3>Cutout preview</h3><div class="preview" id="resultPreview">Your cutout will appear here</div></div>
+    </div>
+  </section>
+  <section class="panel">
+    <h3>2. Choose a background</h3>
+    <div class="swatches" aria-label="Background colors">
+      <button class="swatch" data-color="#ffffff" style="background:#fff" title="White"></button>
+      <button class="swatch" data-color="#111827" style="background:#111827" title="Black"></button>
+      <button class="swatch" data-color="#dbeafe" style="background:#dbeafe" title="Light blue"></button>
+      <button class="swatch" data-color="#fce7f3" style="background:#fce7f3" title="Pink"></button>
+      <button class="swatch" data-color="#dcfce7" style="background:#dcfce7" title="Light green"></button>
+      <button class="swatch" data-color="#fef3c7" style="background:#fef3c7" title="Cream"></button>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div class="field"><label for="color">Custom color</label><input id="color" type="color" value="#ffffff"></div>
+      <div class="field"><label for="bgfile">Or choose a background photo</label><input id="bgfile" type="file" accept="image/*"></div>
+    </div>
+    <div class="row"><button id="savePng" disabled>Download PNG (transparent)</button><button id="saveJpg" disabled class="secondary">Download JPG</button></div>
+    <p class="hint">PNG keeps the background transparent. JPG uses the selected color or background photo.</p>
+  </section>
+  <p class="hint">Privacy: your selected photo is processed in this browser and is not uploaded by this app to a server.</p>
+</main>
+<script type="module">
+import { removeBackground } from "https://esm.sh/@imgly/background-removal@1.5.8";
+const $ = id => document.getElementById(id);
+let sourceFile=null, cutout=null, bgImage=null, bgColor="#ffffff", originalUrl=null, bgUrl=null;
+const photo=$("photo"), removeBtn=$("remove");
+function say(s){$("status").textContent=s}
+function showImage(container,src){container.innerHTML="";const img=new Image();img.src=src;container.appendChild(img)}
+photo.addEventListener("change",()=>{
+  sourceFile=photo.files?.[0]||null; cutout=null;
+  $("savePng").disabled=$("saveJpg").disabled=!sourceFile;
+  removeBtn.disabled=!sourceFile; $("reset").disabled=!sourceFile;
+  if(originalUrl)URL.revokeObjectURL(originalUrl);
+  if(sourceFile){originalUrl=URL.createObjectURL(sourceFile);showImage($("originalPreview"),originalUrl);$("resultPreview").textContent="Remove background to see result.";say("Photo ready. Tap Remove Background.");}
+});
+removeBtn.addEventListener("click",async()=>{
+  if(!sourceFile)return;
+  removeBtn.disabled=true;say("Removing background… First use can take a little longer.");
+  try{
+    cutout=await removeBackground(sourceFile,{output:{format:"image/png"}});
+    const url=URL.createObjectURL(cutout);showImage($("resultPreview"),url);
+    $("savePng").disabled=$("saveJpg").disabled=false;say("Done! Choose a background or download your cutout.");
+  }catch(e){console.error(e);say("Could not remove background. Check your internet connection and try a clear photo again.");}
+  finally{removeBtn.disabled=false;}
+});
+$("reset").addEventListener("click",()=>{photo.value="";sourceFile=null;cutout=null;$("originalPreview").textContent="Your photo will appear here";$("resultPreview").textContent="Your cutout will appear here";$("savePng").disabled=$("saveJpg").disabled=$("reset").disabled=true;removeBtn.disabled=true;say("Choose a photo to get started.");});
+document.querySelectorAll(".swatch").forEach(b=>b.addEventListener("click",()=>{bgColor=b.dataset.color;bgImage=null;if(bgUrl)URL.revokeObjectURL(bgUrl);say("Background color selected.");}));
+$("color").addEventListener("input",e=>{bgColor=e.target.value;bgImage=null;if(bgUrl)URL.revokeObjectURL(bgUrl);});
+$("bgfile").addEventListener("change",e=>{const f=e.target.files?.[0];if(!f)return;bgImage=new Image();bgUrl=URL.createObjectURL(f);bgImage.src=bgUrl;bgImage.onload=()=>say("Background photo selected.");});
+async function render(withBackground){
+ if(!cutout)return null;
+ const fg=await createImageBitmap(cutout);
+ const canvas=document.createElement("canvas");canvas.width=fg.width;canvas.height=fg.height;
+ const ctx=canvas.getContext("2d");
+ if(withBackground){if(bgImage&&bgImage.complete)ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);else{ctx.fillStyle=bgColor;ctx.fillRect(0,0,canvas.width,canvas.height);}}
+ ctx.drawImage(fg,0,0);return canvas;
+}
+$("savePng").addEventListener("click",async()=>{const c=await render(false);if(c)download(c.toDataURL("image/png"),"easy-photo-cutout.png");});
+$("saveJpg").addEventListener("click",async()=>{const c=await render(true);if(c)download(c.toDataURL("image/jpeg",.94),"easy-photo-cutout.jpg");});
+function download(url,name){const a=document.createElement("a");a.href=url;a.download=name;a.click();}
+let installPrompt;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installPrompt=e;$("install").classList.remove("hidden");});
+$("install").addEventListener("click",async()=>{if(!installPrompt){say("Use your browser menu and choose Install app or Add to Home Screen.");return;}installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$("install").classList.add("hidden");});
+if("serviceWorker" in navigator && location.protocol.startsWith("http"))navigator.serviceWorker.register("./sw.js").catch(()=>{});
+</script>
+</body>
+</html>
